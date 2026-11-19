@@ -18,7 +18,9 @@ import { priceChange } from "@/features/market/metrics";
 import { BandChart } from "./band-chart";
 import { StatusBadge } from "./calendar";
 import { md, pct, tone, won, ymd } from "./format";
-import { REACTION_DAYS, type CompanyView, type Earning } from "./load";
+import type { CompanyView, Earning } from "./load";
+import { REACTION_DAYS } from "./reaction-days";
+import { useWriteGuard } from "./write-guard";
 
 const ITEMS: [ConsensusItem, string, "revenue" | "opIncome" | "netIncome"][] = [
   ["rev", "매출액", "revenue"], ["op", "영업이익", "opIncome"], ["net", "순이익", "netIncome"],
@@ -47,13 +49,14 @@ function ConsensusTable({ c, e }: { c: CompanyView; e: Earning }) {
   const [pending, start] = useTransition();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const showActual = e.status === "past";
+  const guard = useWriteGuard();
 
-  const open = () => {
+  const open = guard(() => {
     const d: Record<string, string> = {};
     for (const [k] of ITEMS) for (const f of ["avg", "min", "max"] as const) d[`${k}.${f}`] = e.consensus[k]?.[f]?.toString() ?? "";
     setDraft(d);
     setEditing(true);
-  };
+  });
   const num = (s: string) => (s.trim() === "" ? null : Number(s.replace(/,/g, "")));
   const save = () =>
     start(async () => {
@@ -135,6 +138,7 @@ function UpcomingCard({ c, e, basis }: { c: CompanyView; e: Earning; basis: Earn
   const [editing, setEditing] = useState(false);
   const [date, setDate] = useState(e.announcedOn ?? "");
   const [pending, start] = useTransition();
+  const guard = useWriteGuard();
   const lastYear = c.earnings.find((x) => x.period === `${Number(e.period.slice(0, 4)) - 1}${e.period.slice(4)}`)?.announcedOn;
   const reason =
     e.basis === "ir" ? "DART 기업설명회(IR) 개최 공시" :
@@ -150,7 +154,7 @@ function UpcomingCard({ c, e, basis }: { c: CompanyView; e: Earning; basis: Earn
             <Button size="xs" variant="outline" onClick={() => setEditing(false)}>취소</Button>
             <Button size="xs" disabled={!date || pending} onClick={() => start(async () => { await saveAnnouncementDate(c.stockCode, e.period, date); setEditing(false); })}>저장</Button>
           </div>
-        ) : <Button size="xs" variant="outline" onClick={() => setEditing(true)}>예정일 수정</Button>}
+        ) : <Button size="xs" variant="outline" onClick={guard(() => setEditing(true))}>예정일 수정</Button>}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">근거: {reason}</p>
       {basis && <p className="mt-0.5 text-xs text-muted-foreground">주가와 과거 반응은 직전 발표({label(basis.period)}, {basis.announcedOn ? md(basis.announcedOn) : "—"}) 기준입니다.</p>}
@@ -162,6 +166,7 @@ function Description({ c }: { c: CompanyView }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(c.description ?? "");
   const [pending, start] = useTransition();
+  const guard = useWriteGuard();
   if (editing)
     return (
       <div className="my-2.5 space-y-1.5">
@@ -175,7 +180,7 @@ function Description({ c }: { c: CompanyView }) {
   return (
     <p className="my-2.5 text-sm">
       {c.description ?? <span className="text-muted-foreground">기업 설명이 없습니다. 어떤 사업을 하는지 적어 두면 여기에 보입니다.</span>}{" "}
-      <button type="button" className="text-xs text-primary hover:underline" onClick={() => setEditing(true)}>{c.description ? "수정" : "설명 적기"}</button>
+      <button type="button" className="text-xs text-primary hover:underline" onClick={guard(() => setEditing(true))}>{c.description ? "수정" : "설명 적기"}</button>
     </p>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 // 실적 캘린더 한 화면: 상단(갱신, 관심 기업), 캘린더, 상세.
-import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, StarIcon } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { EarningsCalendar, type CalEvent } from "./calendar";
 import { EarningsDetail } from "./earnings-detail";
 import type { DashboardData } from "./load";
 import { WatchlistDialog } from "./watchlist-dialog";
+import { WriteGuardProvider } from "./write-guard";
 
 const stamp = (iso: string | null) => {
   if (!iso) return "아직 없음";
@@ -21,7 +22,13 @@ const stamp = (iso: string | null) => {
   return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
-export function Dashboard({ data, today }: { data: DashboardData; today: string }) {
+/**
+ * readOnly: 둘러보기. 쓰기 동작의 입구를 누르면 onBlocked를 부른다.
+ * account: 상단 오른쪽에 붙일 계정 동작(로그아웃, 가입 등). notice: 상단 안내.
+ */
+export function Dashboard({ data, today, readOnly = false, onBlocked = () => {}, account, notice }: {
+  data: DashboardData; today: string; readOnly?: boolean; onBlocked?: () => void; account?: ReactNode; notice?: ReactNode;
+}) {
   const router = useRouter();
   const { companies } = data;
   const [filter, setFilter] = useState<string | null>(null);
@@ -56,19 +63,30 @@ export function Dashboard({ data, today }: { data: DashboardData; today: string 
     router.refresh();
   }
 
+  const guard = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => (readOnly ? onBlocked() : fn(...args));
+
   return (
+    <WriteGuardProvider value={{ readOnly, onBlocked }}>
     <main className="mx-auto w-full max-w-[1200px] px-4 py-4">
+      {notice}
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">실적 캘린더</h1>
-          <p className="text-xs text-muted-foreground">관심 기업 {companies.length}개 · 마지막 갱신 <span className="tabular-nums">{stamp(data.refreshedAt)}</span></p>
+          <p className="text-xs text-muted-foreground">
+            {readOnly ? "둘러보기 · 기본 기업" : "관심 기업"} {companies.length}개 · 마지막 갱신 <span className="tabular-nums">{stamp(data.refreshedAt)}</span>
+          </p>
         </div>
-        <div className="flex gap-2">
-          <WatchlistDialog companies={companies} open={wlOpen} onOpenChange={setWlOpen} disabled={!!progress} />
-          <Button disabled={!!progress || companies.length === 0} onClick={() => refresh(companies.map((c) => c.stockCode))}>
+        <div className="flex flex-wrap gap-2">
+          {readOnly ? (
+            <Button variant="outline" onClick={onBlocked}><StarIcon weight="fill" />관심 기업 관리</Button>
+          ) : (
+            <WatchlistDialog companies={companies} open={wlOpen} onOpenChange={setWlOpen} disabled={!!progress} />
+          )}
+          <Button disabled={!!progress || companies.length === 0} onClick={guard(() => refresh(companies.map((c) => c.stockCode)))}>
             <ArrowsClockwiseIcon className={cn(progress && "animate-spin")} />
             {progress ? `갱신 중 ${progress.done}/${progress.total}` : "전체 갱신"}
           </Button>
+          {account}
         </div>
       </div>
 
@@ -87,7 +105,7 @@ export function Dashboard({ data, today }: { data: DashboardData; today: string 
         <Card><CardContent className="py-12 text-center">
           <h2 className="text-base font-semibold">관심 기업이 없습니다</h2>
           <p className="mb-3 text-sm text-muted-foreground">기업을 추가하면 실적 발표일이 캘린더에 표시됩니다.</p>
-          <Button onClick={() => setWlOpen(true)}>관심 기업 추가</Button>
+          <Button onClick={guard(() => setWlOpen(true))}>관심 기업 추가</Button>
         </CardContent></Card>
       ) : (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
@@ -127,5 +145,6 @@ export function Dashboard({ data, today }: { data: DashboardData; today: string 
         </ul>
       </footer>
     </main>
+    </WriteGuardProvider>
   );
 }

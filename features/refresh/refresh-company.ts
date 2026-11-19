@@ -7,7 +7,7 @@ import { nextAnnouncement } from "@/features/earnings/schedule";
 import { fetchCompanyInfo, fetchDisclosureText, fetchMainAccounts, listExchangeDisclosures, type Disclosure } from "@/features/sources/dart";
 import { fetchDailyPrices } from "@/features/sources/krx-prices";
 import { searchNews, type NewsItem } from "@/features/sources/naver-news";
-import { db } from "@/lib/supabase";
+import type { db } from "@/lib/supabase";
 
 const HISTORY = 8; // 과거 발표별 표에 보여 줄 분기 수
 const dash = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
@@ -26,8 +26,8 @@ type EarningsRow = {
   rcept_no: string | null; revenue: number | null; op_income: number | null; net_income: number | null; date_by_user: boolean;
 };
 
-export async function refreshCompany(stockCode: string): Promise<void> {
-  const supa = db();
+/** 공통 데이터를 쓰므로 로그인한 사용자의 클라이언트를 받는다(RLS: 공통 데이터 쓰기는 로그인 사용자만). */
+export async function refreshCompany(supa: Awaited<ReturnType<typeof db>>, stockCode: string): Promise<void> {
   const company = await check(supa.from("companies").select("*").eq("stock_code", stockCode).single());
   const corp = company.corp_code as string;
   const name = company.name as string;
