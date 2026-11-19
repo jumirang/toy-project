@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { saveAnnouncementDate, saveConsensus, saveDescription } from "@/app/actions";
 import type { ConsensusItem } from "@/features/consensus/extract";
 import { label } from "@/features/earnings/period";
@@ -18,6 +19,7 @@ import { priceChange } from "@/features/market/metrics";
 import { BandChart } from "./band-chart";
 import { StatusBadge } from "./calendar";
 import { md, pct, tone, won, ymd } from "./format";
+import { PriceSinceChart } from "./price-since-chart";
 import type { CompanyView, Earning } from "./load";
 import { REACTION_DAYS } from "./reaction-days";
 import { useWriteGuard } from "./write-guard";
@@ -185,12 +187,11 @@ function Description({ c }: { c: CompanyView }) {
   );
 }
 
-export function EarningsDetail({ c, e, today }: { c: CompanyView; e: Earning; today: string }) {
-  const [refDate, setRefDate] = useState("");
+export function EarningsDetail({ c, e, refresh }: { c: CompanyView; e: Earning; refresh?: React.ReactNode }) {
   const [kind, setKind] = useState<"PER" | "PBR">("PER");
   const past = c.earnings.filter((x) => x.status === "past" && x.announcedOn).sort((a, b) => b.period.localeCompare(a.period));
   const basis = e.status === "past" ? e : past[0];
-  const change = basis?.announcedOn ? priceChange(c.closes, basis.announcedOn, refDate || undefined) : null;
+  const change = basis?.announcedOn ? priceChange(c.closes, basis.announcedOn) : null; // 항상 현재(가장 최근 거래일) 기준
   const opDiff = basis ? surprisePct(basis.opIncome, basis.consensus.op?.avg ?? null) : null;
   const band = kind === "PER" ? c.per : c.pbr;
   const lastClose = c.closes.at(-1);
@@ -203,6 +204,7 @@ export function EarningsDetail({ c, e, today }: { c: CompanyView; e: Earning; to
             <h2 className="text-xl font-semibold">{c.name}</h2>
             <span className="text-sm text-muted-foreground tabular-nums">{c.stockCode}</span>
             <StatusBadge status={e.status} />
+            <span className="ml-auto">{refresh}</span>
           </div>
           <p className="text-xs text-muted-foreground">
             {c.industry ?? "업종 정보 없음"} · {label(e.period)} · {e.announcedOn ? `${md(e.announcedOn)} 발표` : "발표일 미정"}
@@ -228,21 +230,8 @@ export function EarningsDetail({ c, e, today }: { c: CompanyView; e: Earning; to
               <Kpi label={lastClose ? `종가 (${md(lastClose.date)})` : "종가"} value={lastClose ? `${won(lastClose.close)}원` : "—"} />
             </div>
             <ConsensusTable key={`p-${c.stockCode}-${basis.period}`} c={c} e={basis} />
-            <Section
-              title="발표 후 주가 변동률"
-              action={
-                <label className="flex items-center gap-1.5 text-xs">
-                  기준일
-                  <Input type="date" className="h-7 w-auto" value={refDate || lastClose?.date || today} min={basis.announcedOn ?? undefined} max={today} onChange={(ev) => setRefDate(ev.target.value)} />
-                </label>
-              }
-            >
-              {change ? (
-                <p className="text-sm tabular-nums">
-                  발표 전날 종가 <b>{won(change.prevClose)}원</b> → {refDate ? md(change.refDate) : "현재"} <b>{won(change.refClose)}원</b>{" "}
-                  <b className={tone(change.pct)}>{pct(change.pct)}</b>
-                </p>
-              ) : <p className="text-sm text-muted-foreground">주가 데이터가 없습니다. 갱신하면 채워집니다.</p>}
+            <Section title={`발표 후 주가 변동률 (${label(basis.period)} 발표 이후, 일별)`}>
+              <PriceSinceChart key={`${c.stockCode}-${basis.period}`} closes={c.closes} announcedOn={basis.announcedOn!} />
             </Section>
           </>
         )}
@@ -258,18 +247,35 @@ export function EarningsDetail({ c, e, today }: { c: CompanyView; e: Earning; to
             <TableBody>
               {past.slice(0, 8).map((x) => {
                 const s = surprisePct(x.opIncome, x.consensus.op?.avg ?? null);
+                const { base, cells } = x.reactions;
+                const prevLine = base ? `발표 전날 종가 ${won(base.prevClose)}원 (${ymd(base.prevDate)})` : "주가 데이터 없음";
                 return (
                   <TableRow key={x.period}>
                     <TableCell>{label(x.period)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground tabular-nums">{x.announcedOn?.slice(2).replaceAll("-", ".")}</TableCell>
-                    <TableCell className={`text-right font-semibold tabular-nums ${tone(s)}`}>{pct(s)}</TableCell>
-                    {REACTION_DAYS.map((d) => <TableCell key={d} className={`text-right tabular-nums ${tone(x.reactions[d])}`}>{pct(x.reactions[d])}</TableCell>)}
+                    <TipCell className="text-right text-muted-foreground tabular-nums" tip={base ? <>발표일 종가 {won(base.dayClose)}원 ({ymd(base.dayDate)})<br />{prevLine}</> : prevLine}>
+                      {x.announcedOn?.slice(2).replaceAll("-", ".")}
+                    </TipCell>
+                    <TipCell className={`text-right font-semibold tabular-nums ${tone(s)}`} tip={<>영업이익 실적 {won(x.opIncome)}억 원<br />컨센서스 평균 {won(x.consensus.op?.avg)}억 원</>}>
+                      {pct(s)}
+                    </TipCell>
+                    {REACTION_DAYS.map((d) => {
+                      const cell = cells[d];
+                      if (!cell) return <TableCell key={d} className="text-right tabular-nums">—</TableCell>;
+                      const tip = cell.reached
+                        ? <>+{d}거래일 {ymd(cell.date)} 종가 {won(cell.close)}원<br />{prevLine}</>
+                        : <>아직 {d}거래일이 지나지 않아 현재 기준<br />{ymd(cell.date)} 종가 {won(cell.close)}원<br />{prevLine}</>;
+                      return (
+                        <TipCell key={d} className={`text-right tabular-nums ${tone(cell.pct)} ${cell.reached ? "" : "italic"}`} tip={tip}>
+                          {pct(cell.pct)}{!cell.reached && <span className="ml-0.5 text-[10px] text-muted-foreground not-italic">현재</span>}
+                        </TipCell>
+                      );
+                    })}
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">주가 반응은 발표 전날 종가 대비, 발표일을 첫 거래일로 센 거래일 기준입니다.</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">주가 반응은 발표 전날 종가 대비, 발표일을 첫 거래일로 센 거래일 기준입니다. 아직 그 거래일이 오지 않은 칸은 현재 종가 기준이며 &quot;현재&quot;로 표시합니다. 칸에 마우스를 올리면 근거 주가가 보입니다.</p>
         </Section>
 
         <Section
@@ -313,6 +319,15 @@ export function EarningsDetail({ c, e, today }: { c: CompanyView; e: Earning; to
         </Section>
       </CardContent>
     </Card>
+  );
+}
+
+function TipCell({ className, tip, children }: { className?: string; tip: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<TableCell className={`cursor-help ${className ?? ""}`} />}>{children}</TooltipTrigger>
+      <TooltipContent className="text-left">{tip}</TooltipContent>
+    </Tooltip>
   );
 }
 

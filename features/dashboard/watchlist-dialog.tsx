@@ -1,13 +1,13 @@
 "use client";
-// 관심 기업 관리: 받아 둔 국내 상장사 목록에서 검색해 추가(없으면 DART에서 다시 찾음), 기업별 갱신과 삭제.
-import { ArrowsClockwiseIcon, StarIcon } from "@phosphor-icons/react";
-import { useRouter } from "next/navigation";
+// 관심 기업 관리: 받아 둔 국내 상장사 목록에서 검색해 추가(없으면 DART에서 다시 찾음)와 삭제만 한다.
+// 기업별 갱신은 상세 머리의 갱신 버튼이 맡는다.
+import { StarIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { addCompany, listCorps, refreshOne, removeCompany, searchCorpsExternal } from "@/app/actions";
+import { addCompany, listCorps, removeCompany, searchCorpsExternal } from "@/app/actions";
 import { cn } from "@/lib/utils";
 
 type Corp = { stock_code: string; name: string };
@@ -25,12 +25,10 @@ export function WatchlistDialog({ companies, open, onOpenChange, disabled }: {
   onOpenChange: (open: boolean) => void;
   disabled?: boolean; // 전체 갱신 중
 }) {
-  const router = useRouter();
   const [corps, setCorps] = useState<Corp[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [external, setExternal] = useState<{ query: string; hits: Corp[] | null } | null>(null);
-  const [refreshing, setRefreshing] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const watched = new Set(companies.map((c) => c.stockCode));
   const q = query.trim().toLowerCase();
@@ -62,20 +60,13 @@ export function WatchlistDialog({ companies, open, onOpenChange, disabled }: {
   const ext = external?.query === q ? external : null;
   const hits = localHits.length ? localHits : (ext?.hits ?? []);
 
-  async function refresh(code: string) {
-    setRefreshing(code);
-    await refreshOne(code);
-    setRefreshing(null);
-    router.refresh();
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={<Button variant="outline"><StarIcon weight="fill" />관심 기업 관리</Button>} />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>관심 기업 관리</DialogTitle>
-          <DialogDescription>10개 안팎을 권장합니다. 추가한 기업은 아래 목록에서 바로 갱신하거나, 다음 전체 갱신 때 데이터를 가져옵니다.</DialogDescription>
+          <DialogDescription>10개 안팎을 권장합니다. 추가한 기업은 상세 화면의 갱신 버튼이나 다음 전체 갱신 때 데이터를 가져옵니다.</DialogDescription>
         </DialogHeader>
         <Input
           autoFocus
@@ -111,15 +102,10 @@ export function WatchlistDialog({ companies, open, onOpenChange, disabled }: {
               <span className="min-w-0">
                 <b>{c.name}</b> <span className="text-muted-foreground tabular-nums">{c.stockCode}</span>
                 <span className={cn("block text-xs", c.refreshError ? "text-destructive" : "text-muted-foreground")}>
-                  {refreshing === c.stockCode ? "갱신 중…" : c.refreshError ? `갱신 실패: ${c.refreshError}` : stamp(c.refreshedAt)}
+                  {c.refreshError ? `갱신 실패: ${c.refreshError}` : stamp(c.refreshedAt)}
                 </span>
               </span>
-              <span className="flex shrink-0 gap-1">
-                <Button size="xs" variant="outline" disabled={disabled || !!refreshing || pending} onClick={() => refresh(c.stockCode)} aria-label={`${c.name} 갱신`}>
-                  <ArrowsClockwiseIcon className={cn(refreshing === c.stockCode && "animate-spin")} />갱신
-                </Button>
-                <Button size="xs" variant="ghost" disabled={pending || refreshing === c.stockCode} onClick={() => start(() => removeCompany(c.stockCode))}>삭제</Button>
-              </span>
+              <Button size="xs" variant="ghost" disabled={disabled || pending} onClick={() => start(() => removeCompany(c.stockCode))}>삭제</Button>
             </li>
           ))}
         </ul>

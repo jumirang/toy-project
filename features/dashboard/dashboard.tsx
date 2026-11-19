@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { EarningsCalendar, type CalEvent } from "./calendar";
 import { EarningsDetail } from "./earnings-detail";
 import type { DashboardData } from "./load";
+import { RefreshButton } from "./refresh-button";
 import { WatchlistDialog } from "./watchlist-dialog";
 import { WriteGuardProvider } from "./write-guard";
 
@@ -45,6 +46,17 @@ export function Dashboard({ data, today, readOnly = false, onBlocked = () => {},
   const latestPast = [...events].filter((e) => e.status === "past").sort((a, b) => b.date.localeCompare(a.date))[0];
   const [picked, setSelected] = useState<{ code: string; period: string } | null>(null);
   const selected = picked ?? (latestPast ? { code: latestPast.code, period: latestPast.period } : null);
+
+  /** 기업을 고르면 그 기업만 보이고, 캘린더는 가장 최근 발표가 있는 달로 옮겨 그 발표를 바로 연다. */
+  function pickCompany(code: string | null) {
+    setFilter(code);
+    if (!code) return;
+    const latest = events.filter((e) => e.code === code && e.status === "past").sort((a, b) => b.date.localeCompare(a.date))[0]
+      ?? events.filter((e) => e.code === code).sort((a, b) => a.date.localeCompare(b.date))[0];
+    if (!latest) return;
+    setMonth([Number(latest.date.slice(0, 4)), Number(latest.date.slice(5, 7)) - 1]);
+    setSelected({ code, period: latest.period });
+  }
 
   const selCompany = companies.find((c) => c.stockCode === selected?.code);
   const selEarning = selCompany?.earnings.find((e) => e.period === selected?.period);
@@ -115,7 +127,7 @@ export function Dashboard({ data, today, readOnly = false, onBlocked = () => {},
                 <button
                   key={c.stockCode ?? "all"}
                   type="button"
-                  onClick={() => setFilter(c.stockCode)}
+                  onClick={() => pickCompany(c.stockCode)}
                   className={cn("h-7 rounded-full border px-2.5 text-xs", filter === c.stockCode ? "border-foreground bg-foreground text-background" : "bg-background hover:bg-muted")}
                 >
                   {c.name}
@@ -126,7 +138,10 @@ export function Dashboard({ data, today, readOnly = false, onBlocked = () => {},
           </CardContent></Card>
 
           {selCompany && selEarning ? (
-            <EarningsDetail key={`${selCompany.stockCode}-${selEarning.period}`} c={selCompany} e={selEarning} today={today} />
+            <EarningsDetail
+              key={`${selCompany.stockCode}-${selEarning.period}`} c={selCompany} e={selEarning}
+              refresh={<RefreshButton code={selCompany.stockCode} name={selCompany.name} disabled={!!progress} />}
+            />
           ) : (
             <Card><CardContent className="py-12 text-center">
               <h2 className="text-base font-semibold">발표일을 고르세요</h2>

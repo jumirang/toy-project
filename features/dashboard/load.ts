@@ -19,7 +19,7 @@ export type Earning = {
   period: string; announcedOn: string | null; status: "past" | "confirmed" | "expected"; basis: string | null;
   revenue: number | null; opIncome: number | null; netIncome: number | null; dateByUser: boolean;
   consensus: Partial<Record<ConsensusItem, Consensus>>;
-  reactions: Record<number, number | null>;
+  reactions: ReturnType<typeof reactions>;
 };
 export type Band = ReturnType<typeof bandSeries>;
 export type CompanyView = {
@@ -108,7 +108,7 @@ export async function loadDashboard(mode: "account" | "guest"): Promise<Dashboar
         period: e.period, announcedOn: myDate ?? e.announced_on, status: e.status, basis: myDate ? "user" : e.basis, dateByUser: !!myDate,
         revenue: e.revenue == null ? null : Number(e.revenue), opIncome: e.op_income == null ? null : Number(e.op_income),
         netIncome: e.net_income == null ? null : Number(e.net_income),
-        reactions: e.status === "past" && e.announced_on ? reactions(closes, e.announced_on, [...REACTION_DAYS]) : {},
+        reactions: e.status === "past" && e.announced_on ? reactions(closes, e.announced_on, [...REACTION_DAYS]) : { base: null, cells: {} },
         consensus: Object.fromEntries((["rev", "op", "net"] as ConsensusItem[]).flatMap((item) => {
           // 공통 값(뉴스 자동 추출) 위에 이 계정이 고친 값을 얹는다.
           const k = consensus.find((x) => x.stock_code === code && x.period === e.period && x.item === item);

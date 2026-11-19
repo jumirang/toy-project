@@ -12,11 +12,30 @@ export function priceChange(closes: Close[], announcedOn: string, refDate?: stri
   return { prevClose: prev.close, refClose: ref.close, refDate: ref.date, pct: pct(prev.close, ref.close) };
 }
 
-/** 발표일을 첫 거래일로 셀 때 N번째 거래일 종가의 변동률. 아직 N거래일이 안 지났으면 null. */
-export function reactions(closes: Close[], announcedOn: string, offsets: number[]): Record<number, number | null> {
+export type ReactionCell = { date: string; close: number; pct: number; reached: boolean };
+export type ReactionBase = { prevDate: string; prevClose: number; dayDate: string; dayClose: number };
+
+/**
+ * 발표일을 첫 거래일로 셀 때 N번째 거래일 종가와 발표 전날 종가 대비 변동률.
+ * 아직 N거래일이 안 지난 첫 칸은 가장 최근 거래일(현재) 기준으로 채우고(reached: false), 그 뒤 칸은 null.
+ */
+export function reactions(closes: Close[], announcedOn: string, offsets: number[]) {
   const prev = closes.filter((c) => c.date < announcedOn).at(-1);
   const after = closes.filter((c) => c.date >= announcedOn);
-  return Object.fromEntries(offsets.map((n) => [n, prev && after[n - 1] ? pct(prev.close, after[n - 1].close) : null]));
+  const base: ReactionBase | null = prev && after[0] ? { prevDate: prev.date, prevClose: prev.close, dayDate: after[0].date, dayClose: after[0].close } : null;
+  let filledCurrent = false;
+  const cells: Record<number, ReactionCell | null> = {};
+  for (const n of offsets) {
+    const hit = after[n - 1];
+    if (!prev || !after.length) cells[n] = null;
+    else if (hit) cells[n] = { date: hit.date, close: hit.close, pct: pct(prev.close, hit.close), reached: true };
+    else if (!filledCurrent) {
+      const last = after.at(-1)!;
+      cells[n] = { date: last.date, close: last.close, pct: pct(prev.close, last.close), reached: false };
+      filledCurrent = true;
+    } else cells[n] = null;
+  }
+  return { base, cells };
 }
 
 export type BandPoint = { month: string; price: number; multiple: number | null };
