@@ -57,12 +57,15 @@ export async function searchCorpsExternal(query: string): Promise<CorpHit[]> {
 }
 
 /** 관심 기업 추가: 기업 정보는 공통, 목록은 이 계정의 것. */
-export async function addCompany(stockCode: string) {
+/** 관심 기업 추가: 기업 정보는 공통, 목록은 이 계정의 것. 아직 한 번도 갱신되지 않은 기업이면 needsRefresh로 알린다. */
+export async function addCompany(stockCode: string): Promise<{ needsRefresh: boolean }> {
   const { supa, userId } = await signedIn();
   const corp = await ok(supa.from("corps").select("*").eq("stock_code", stockCode).single());
   await ok(supa.from("companies").upsert({ stock_code: corp.stock_code, corp_code: corp.corp_code, name: corp.name }, { onConflict: "stock_code", ignoreDuplicates: true }));
   await ok(supa.from("watchlist").upsert({ user_id: userId, stock_code: corp.stock_code }, { ignoreDuplicates: true }));
+  const company = await ok(supa.from("companies").select("refreshed_at").eq("stock_code", corp.stock_code).single());
   revalidatePath("/");
+  return { needsRefresh: !company?.refreshed_at };
 }
 
 /** 관심 기업 삭제: 이 계정의 목록에서만 뺀다. 공통 데이터는 남는다. */

@@ -1,6 +1,6 @@
 "use client";
-// 관심 기업 관리: 받아 둔 국내 상장사 목록에서 검색해 추가(없으면 DART에서 다시 찾음)와 삭제만 한다.
-// 기업별 갱신은 상세 머리의 갱신 버튼이 맡는다.
+// 관심 기업 관리: 받아 둔 국내 상장사 목록에서 검색해 추가(없으면 DART에서 다시 찾음)와 삭제.
+// 한 번도 갱신된 적 없는 기업을 추가하면 바로 첫 갱신을 돌린다. 그 뒤 갱신은 상세 머리의 갱신 버튼이 맡는다.
 import { StarIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { addCompany, listCorps, removeCompany, searchCorpsExternal } from "@/app/actions";
 import { cn } from "@/lib/utils";
+
+import { useRefreshStream } from "./use-refresh-stream";
 
 type Corp = { stock_code: string; name: string };
 type WatchedCompany = { stockCode: string; name: string; refreshedAt: string | null; refreshError: string | null };
@@ -30,6 +32,7 @@ export function WatchlistDialog({ companies, open, onOpenChange, disabled }: {
   const [query, setQuery] = useState("");
   const [external, setExternal] = useState<{ query: string; hits: Corp[] | null } | null>(null);
   const [pending, start] = useTransition();
+  const { refresh, running, error } = useRefreshStream();
   const watched = new Set(companies.map((c) => c.stockCode));
   const q = query.trim().toLowerCase();
 
@@ -66,7 +69,7 @@ export function WatchlistDialog({ companies, open, onOpenChange, disabled }: {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>관심 기업 관리</DialogTitle>
-          <DialogDescription>10개 안팎을 권장합니다. 추가한 기업은 상세 화면의 갱신 버튼이나 다음 전체 갱신 때 데이터를 가져옵니다.</DialogDescription>
+          <DialogDescription>10개 안팎을 권장합니다. 처음 추가하는 기업은 바로 데이터를 가져오고, 이후에는 상세 화면의 갱신 버튼이나 전체 갱신으로 최신화합니다.</DialogDescription>
         </DialogHeader>
         <Input
           autoFocus
@@ -86,7 +89,11 @@ export function WatchlistDialog({ companies, open, onOpenChange, disabled }: {
                 key={h.stock_code}
                 type="button"
                 disabled={watched.has(h.stock_code) || pending}
-                onClick={() => start(async () => { await addCompany(h.stock_code); setQuery(""); })}
+                onClick={() => start(async () => {
+                  const { needsRefresh } = await addCompany(h.stock_code);
+                  setQuery("");
+                  if (needsRefresh) void refresh(h.stock_code);
+                })}
                 className="flex w-full justify-between px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50"
               >
                 <span>{h.name}</span>
@@ -101,11 +108,15 @@ export function WatchlistDialog({ companies, open, onOpenChange, disabled }: {
             <li key={c.stockCode} className="flex items-center justify-between gap-2 border-b py-1.5 text-sm last:border-b-0">
               <span className="min-w-0">
                 <b>{c.name}</b> <span className="text-muted-foreground tabular-nums">{c.stockCode}</span>
-                <span className={cn("block text-xs", c.refreshError ? "text-destructive" : "text-muted-foreground")}>
-                  {c.refreshError ? `갱신 실패: ${c.refreshError}` : stamp(c.refreshedAt)}
-                </span>
+                {running?.code === c.stockCode ? (
+                  <span className="block text-xs text-primary">첫 갱신: {running.stage}…</span>
+                ) : (
+                  <span className={cn("block text-xs", c.refreshError || error?.code === c.stockCode ? "text-destructive" : "text-muted-foreground")}>
+                    {error?.code === c.stockCode ? `갱신 실패: ${error.message}` : c.refreshError ? `갱신 실패: ${c.refreshError}` : stamp(c.refreshedAt)}
+                  </span>
+                )}
               </span>
-              <Button size="xs" variant="ghost" disabled={disabled || pending} onClick={() => start(() => removeCompany(c.stockCode))}>삭제</Button>
+              <Button size="xs" variant="ghost" disabled={disabled || pending || running?.code === c.stockCode} onClick={() => start(() => removeCompany(c.stockCode))}>삭제</Button>
             </li>
           ))}
         </ul>
