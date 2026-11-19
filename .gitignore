@@ -50,3 +50,6 @@ next-env.d.ts
 
 # worktree
 .claude/worktrees
+
+# supabase cli link state
+supabase/.temp

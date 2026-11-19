@@ -44,3 +44,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 자동 코드 리뷰는 최대 1회, 가장 낮은 강도(`code-review low`)로만 돌린다. 리뷰어를 못 부르면 그 사실만 적고 완료로 본다.
 - 지적 중 스펙의 수용 기준을 깨거나 주 경로가 실제로 깨지는 것만 고친다. 나머지는 `docs/follow-ups/`에 한 줄로 남긴다. 재리뷰는 하지 않는다.
 - 스펙이 요구하지 않은 보안 하드닝·엣지케이스·성능 방어는 범위 밖이다.
+
+# Supabase 최신 문서
+
+- Supabase(Auth, Postgres, RLS, `@supabase/ssr`)를 다루는 작업을 시작할 때, 코드를 쓰기 전에 공식 문서 색인 https://supabase.com/llms.txt 를 받아 해당 주제의 문서를 읽는다. 저장소에 복사해 두지 않는다.
+- 받은 내용은 설치된 `@supabase/*` 패키지 버전과 대조해 맞는 방법만 쓴다. 문서를 받을 수 없으면 그 사실을 적고, 기억에 의존해 진행하지 않는다.
+- 설치된 공식 스킬 `supabase`, `supabase-postgres-best-practices`(출처 `supabase/agent-skills`)를 함께 따른다. 갱신은 `skills add supabase/agent-skills --skill supabase supabase-postgres-best-practices --agent codex claude-code --copy -y`로 한다.

@@ -27,8 +27,25 @@ describe("발표 후 주가 변동률 (AC10)", () => {
 });
 
 describe("과거 발표별 +N거래일 반응 (AC11)", () => {
-  test("발표일을 첫 거래일로 센 N번째 거래일 종가, 아직 오지 않았으면 null", () => {
-    expect(reactions(closes, "2026-10-08", [1, 3, 5])).toEqual({ 1: 3, 3: 10, 5: null });
+  test("발표일을 첫 거래일로 센 N번째 거래일의 날짜·종가·변동률과 기준 주가", () => {
+    const r = reactions(closes, "2026-10-08", [1, 3]);
+    expect(r.base).toEqual({ prevDate: "2026-10-02", prevClose: 100_000, dayDate: "2026-10-08", dayClose: 103_000 });
+    expect(r.cells).toEqual({
+      1: { date: "2026-10-08", close: 103_000, pct: 3, reached: true },
+      3: { date: "2026-10-12", close: 110_000, pct: 10, reached: true },
+    });
+  });
+
+  test("아직 오지 않은 첫 칸은 현재(가장 최근 거래일) 기준, 그 뒤 칸은 null", () => {
+    expect(reactions(closes, "2026-10-08", [3, 5, 6]).cells).toEqual({
+      3: { date: "2026-10-12", close: 110_000, pct: 10, reached: true },
+      5: { date: "2026-10-13", close: 95_000, pct: -5, reached: false },
+      6: null,
+    });
+  });
+
+  test("발표 전 종가가 없으면 기준과 칸이 모두 비어 있다", () => {
+    expect(reactions(closes, "2026-10-01", [1])).toEqual({ base: null, cells: { 1: null } });
   });
 });
 

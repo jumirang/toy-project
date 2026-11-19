@@ -7,7 +7,7 @@ import { nextAnnouncement } from "@/features/earnings/schedule";
 import { fetchCompanyInfo, fetchDisclosureText, fetchMainAccounts, listExchangeDisclosures, type Disclosure } from "@/features/sources/dart";
 import { fetchDailyPrices } from "@/features/sources/krx-prices";
 import { searchNews, type NewsItem } from "@/features/sources/naver-news";
-import { db } from "@/lib/supabase";
+import type { db } from "@/lib/supabase";
 
 const HISTORY = 8; // 과거 발표별 표에 보여 줄 분기 수
 const dash = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
@@ -26,8 +26,9 @@ type EarningsRow = {
   rcept_no: string | null; revenue: number | null; op_income: number | null; net_income: number | null; date_by_user: boolean;
 };
 
-export async function refreshCompany(stockCode: string): Promise<void> {
-  const supa = db();
+/** 공통 데이터를 쓰므로 로그인한 사용자의 클라이언트를 받는다(RLS: 공통 데이터 쓰기는 로그인 사용자만). */
+/** onStage: 단계가 바뀔 때마다 화면에 보일 진행 문구를 받는다. */
+export async function refreshCompany(supa: Awaited<ReturnType<typeof db>>, stockCode: string, onStage: (stage: string) => void = () => {}): Promise<void> {
   const company = await check(supa.from("companies").select("*").eq("stock_code", stockCode).single());
   const corp = company.corp_code as string;
   const name = company.name as string;
@@ -35,10 +36,12 @@ export async function refreshCompany(stockCode: string): Promise<void> {
   const names = [name, ...({ NAVER: ["네이버"], "LG에너지솔루션": ["LG엔솔"], "한화에어로스페이스": ["한화에어로"] } as Record<string, string[]>)[name] ?? []];
 
   // 1. 기업개황: 업종, 홈페이지, IR 링크
+  onStage("DART 기업개황 연동 중");
   const info = await fetchCompanyInfo(corp);
   await check(supa.from("companies").update({ industry_code: info.industry_code, homepage: info.homepage, ir_url: info.ir_url }).eq("stock_code", stockCode));
 
   // 2. 잠정실적 공시와 IR 공시 (최근 3년)
+  onStage("DART 잠정실적 공시 읽는 중");
   const now = today();
   const disclosures = await listExchangeDisclosures(corp, compact(daysBefore(now, 365 * 3 + 30)), compact(now));
   const prelim = disclosures.filter((d) => /영업\(잠정\)실적\(공정공시\)/.test(d.report_nm));
@@ -102,6 +105,7 @@ export async function refreshCompany(stockCode: string): Promise<void> {
   if (rows.length) await check(supa.from("earnings").upsert(rows));
 
   // 4. 분기 재무(밴드용): 최근 6년 주요계정. 이미 있는 분기는 최근 2개만 다시 읽는다.
+  onStage("DART 분기 재무 읽는 중");
   const fin = new Map<string, { net_income: number | null; equity: number | null }>();
   const haveFin = new Set(((await check(supa.from("quarterly_financials").select("period").eq("stock_code", stockCode))) as { period: string }[]).map((r) => r.period));
   const thisYear = Number(now.slice(0, 4));
@@ -130,6 +134,7 @@ export async function refreshCompany(stockCode: string): Promise<void> {
   if (fin.size) await check(supa.from("quarterly_financials").upsert([...fin].map(([period, v]) => ({ stock_code: stockCode, period, ...v }))));
 
   // 5. 일별 종가: 마지막 저장일 다음 날부터 (처음이면 5년 1개월 전부터)
+  onStage("주가 시세 가져오는 중");
   const last = (await check(supa.from("prices").select("trade_date").eq("stock_code", stockCode).order("trade_date", { ascending: false }).limit(1))) as { trade_date: string }[];
   const begin = last[0] ? daysBefore(last[0].trade_date, -1) : daysBefore(now, 365 * 5 + 40);
   const prices = await fetchDailyPrices(stockCode, compact(begin));
@@ -138,12 +143,14 @@ export async function refreshCompany(stockCode: string): Promise<void> {
   }
 
   // 6. 최근 뉴스
+  onStage("네이버 뉴스 모으는 중");
   const latestNews = (await searchNews(`${name} 실적`, { sort: "date", display: 50 })).filter((n) => names.some((x) => n.title.includes(x))).slice(0, 20);
   if (latestNews.length) {
     await check(supa.from("news").upsert(latestNews.map((n) => ({ stock_code: stockCode, url: n.url, title: n.title, description: n.description, pub_date: n.pubDate }))));
   }
 
   // 7. 컨센서스 평균: 표에 보일 과거 분기와 다음 분기. 사용자가 고친 값은 덮어쓰지 않는다.
+  onStage("뉴스에서 컨센서스 찾는 중");
   const cons = (await check(supa.from("consensus").select("*").eq("stock_code", stockCode))) as {
     period: string; item: ConsensusItem; avg: number | null; avg_source: string | null; article_url: string | null;
   }[];
