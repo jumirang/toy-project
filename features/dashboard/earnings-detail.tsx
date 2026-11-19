@@ -215,7 +215,7 @@ export function EarningsDetail({ c, e, refresh }: { c: CompanyView; e: Earning; 
             {c.irUrl && <Ext href={c.irUrl}>IR</Ext>}
             <Ext href={`https://dart.fss.or.kr/dsab007/main.do?autoSearch=Y&textCrpNm=${encodeURIComponent(c.name)}`}>DART 공시</Ext>
             <Ext href={`https://finance.naver.com/item/main.naver?code=${c.stockCode}`}>네이버 증권</Ext>
-            <Ext href={`https://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?gicode=A${c.stockCode}`}>에프앤가이드</Ext>
+            <Ext href={`https://wcomp.fnguide.com/CompanyInfo/Snapshot?cmp_cd=${c.stockCode}`}>에프앤가이드</Ext>
           </div>
         </div>
 
