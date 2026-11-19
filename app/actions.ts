@@ -13,17 +13,38 @@ async function ok<T>(p: PromiseLike<{ data: T; error: { message: string } | null
   return data;
 }
 
-export async function searchCorps(query: string): Promise<{ stock_code: string; name: string }[]> {
-  const q = query.trim();
-  if (!q) return [];
+type CorpHit = { stock_code: string; name: string };
+
+/** DART 상장사 목록을 새로 받아 corps 테이블에 쌓는다. */
+async function reloadCorps() {
   const supa = db();
-  const { count } = await supa.from("corps").select("stock_code", { count: "exact", head: true });
-  if (!count) {
-    const corps = await fetchListedCorps();
-    for (let i = 0; i < corps.length; i += 1000) await ok(supa.from("corps").upsert(corps.slice(i, i + 1000)));
+  const corps = await fetchListedCorps();
+  for (let i = 0; i < corps.length; i += 1000) await ok(supa.from("corps").upsert(corps.slice(i, i + 1000)));
+  return corps;
+}
+
+/** 검색용 국내 상장사 전체 목록. 처음 한 번은 DART에서 받아 보관한다. */
+export async function listCorps(): Promise<CorpHit[]> {
+  const supa = db();
+  const out: CorpHit[] = [];
+  for (let from = 0; ; from += 1000) {
+    const page = (await ok(supa.from("corps").select("stock_code, name").order("stock_code").range(from, from + 999))) ?? [];
+    out.push(...page);
+    if (page.length < 1000) break;
   }
-  const safe = q.replace(/[%,()]/g, "");
-  return (await ok(supa.from("corps").select("stock_code, name").or(`name.ilike.%${safe}%,stock_code.like.${safe}%`).order("name").limit(8))) ?? [];
+  if (out.length) return out;
+  return (await reloadCorps()).map(({ stock_code, name }) => ({ stock_code, name }));
+}
+
+/** 보관한 목록에 없을 때: DART 상장사 목록을 다시 받아(신규 상장 반영) 찾는다. */
+export async function searchCorpsExternal(query: string): Promise<CorpHit[]> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const corps = await reloadCorps();
+  return corps
+    .filter((c) => c.name.toLowerCase().includes(q) || c.stock_code.startsWith(q))
+    .slice(0, 8)
+    .map(({ stock_code, name }) => ({ stock_code, name }));
 }
 
 export async function addCompany(stockCode: string) {

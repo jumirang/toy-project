@@ -64,7 +64,7 @@ export function Dashboard({ data, today }: { data: DashboardData; today: string 
           <p className="text-xs text-muted-foreground">관심 기업 {companies.length}개 · 마지막 갱신 <span className="tabular-nums">{stamp(data.refreshedAt)}</span></p>
         </div>
         <div className="flex gap-2">
-          <WatchlistDialog companies={companies} open={wlOpen} onOpenChange={setWlOpen} />
+          <WatchlistDialog companies={companies} open={wlOpen} onOpenChange={setWlOpen} disabled={!!progress} />
           <Button disabled={!!progress || companies.length === 0} onClick={() => refresh(companies.map((c) => c.stockCode))}>
             <ArrowsClockwiseIcon className={cn(progress && "animate-spin")} />
             {progress ? `갱신 중 ${progress.done}/${progress.total}` : "전체 갱신"}
