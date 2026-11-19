@@ -81,6 +81,12 @@ create table if not exists app_state (
 );
 insert into app_state (id) values (1) on conflict do nothing;
 
+-- 처음 설치할 때 기본 관심 기업. 사용자가 지우면 다시 생기지 않는다(이 SQL은 설치 때 한 번만 실행).
+insert into companies (stock_code, corp_code, name) values
+  ('005930', '00126380', '삼성전자'),
+  ('000660', '00164779', 'SK하이닉스')
+on conflict (stock_code) do nothing;
+
 -- 새 프로젝트는 SQL로 만든 테이블을 Data API 역할에 자동으로 열지 않으므로 권한을 직접 준다.
 grant usage on schema public to anon;
 grant select, insert, update, delete on corps, companies, earnings, consensus, quarterly_financials, prices, news, app_state to anon;
