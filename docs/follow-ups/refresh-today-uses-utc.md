@@ -6,6 +6,6 @@
 
 **Suspected cause**: 갱신 코드에서 날짜를 계산할 때 시간대를 고려하지 않았다.
 
-**What was tried**: 수용 기준을 깨지 않고 다음 갱신에서 채워지므로 이번 작업(docs/specs/earnings-calendar/)에서는 고치지 않았다.
+**What was tried**: 수용 기준을 깨지 않고 다음 갱신에서 채워지므로 실적 캘린더 첫 작업에서는 고치지 않았다.
 
 **Proposed next step**: `today()`를 `load.ts`와 같은 한국 날짜 계산으로 바꾸고, 새벽 시간대에 공시 목록 `end_de`가 당일로 잡히는지 확인한다.
