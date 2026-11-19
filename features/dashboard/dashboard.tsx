@@ -119,6 +119,13 @@ export function Dashboard({ data, today }: { data: DashboardData; today: string 
           )}
         </div>
       )}
+
+      <footer className="mt-6 border-t pt-3 text-xs text-muted-foreground">
+        <ul className="list-disc space-y-1 pl-4">
+          <li>컨센서스는 실적 발표일 전후 뉴스 기사에서 인용한 값입니다. 에프앤가이드 등 유료 컨센서스 데이터와 연동하지 않아 실제 값과 다를 수 있습니다.</li>
+          <li>PER·PBR 밴드는 DART 공시의 연결 재무 수치로 직접 계산한 값이라 정확하지 않을 수 있습니다.</li>
+        </ul>
+      </footer>
     </main>
   );
 }
